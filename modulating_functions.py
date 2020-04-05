@@ -38,8 +38,8 @@ CHUNK_SIZE_FM = 250
 FM_PM = 400  # frequency of modulating signal
 DURATION_PM = 2 / FM_PM  # 0.01#duration of the signal
 ALPHA = PI / 2  # 0.3 #amplitude of modulating signal
-THETA = PI / 4  # phase offset of modulating signal
-BETA = PI / 5  # constant carrier phase offset
+THETA = 0  # phase offset of modulating signal
+BETA = 0 # constant carrier phase offset
 
 ###------------------###
 ###  create gausian  ###
