@@ -1,36 +1,26 @@
-import modulating_functions as mf
-import demodulating_functions as df
-import general_funcrions as gf
-import numpy as np
-from inspect import getmembers, isfunction
+from constants import *
+from modulating_functions import *
+from demodulating_functions import *
+from general_functions import *
 
-global FREQ
-global FM_PM
-global DURATION_PM
-global SAMPLE_RATE
-
-
-SAMPLE_RATE = 44000  # 1/Sec
-BASIC_TIME = 5000 / SAMPLE_RATE  # ~0.1133 Sec
-FREQ = 18500  # Hz
-FREQ_SHIFT = 1000
-
-def initilize_global_vars():
-    mf.SAMPLE_RATE = SAMPLE_RATE
-    mf.FREQ = FREQ
-    df.SAMPLE_RATE = SAMPLE_RATE
-    df.FREQ = FREQ
-    gf.SAMPLE_RATE = SAMPLE_RATE
-
-
-modulating_f = [o[0] for o in getmembers(mf) if isfunction(o[1])]
-demodulating_f = [o[0] for o in getmembers(df) if isfunction(o[1])]
-general_f = [o[0] for o in getmembers(gf) if isfunction(o[1])]
 
 if __name__=="__main__":
-    initilize_global_vars()
-    bits = np.array([1,0,1,0,1,0,1,1,0,0,0,1])
-    to_send = mf.multiply(bits, 3)
-    final_sample_list = mf.modulation(to_send, mode="FM")
-    gf.save_wave(SAMPLE_RATE, final_sample_list, 'test_FM_NEW.wav')
+    bits = np.array([1,0,1,0,1,0,1,1,0,0,0,1]*5)
+    to_send = multiply(bits, 3)
+    final_sample_list = modulation(to_send, mode="FM")
+    frame_rate, data = wavfile.read("new_FM_test.wav")
+    data = data[:,1]
+    # data = data[40000:]
+    n_frames = len(final_sample_list)
+    eps = find_thresh(data, n_frames, len(to_send))
+    print(eps)
+    dat = cut_irellevant(data, thresh=eps, draw=False)
+    print(len(final_sample_list))
+    print(len(dat))
+    dat = DecypherFreqShift(dat)
+    print(dat - bits)
+    # print(bits)
+
+
+
 

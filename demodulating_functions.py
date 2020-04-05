@@ -1,46 +1,4 @@
-import numpy as np
-from scipy.io import wavfile
-import soundfile as sf
-import soundcard as sc
-from scipy.signal import butter, lfilter
-from scipy.io import wavfile
-import matplotlib.pyplot as plt
-from scipy import signal
-import matplotlib as mp
-import os
-# import pyaudio
-import wave
-import sys
-import sounddevice as sd
-from scipy.io.wavfile import write
-from scipy.signal import hilbert
-import simpleaudio as sa
-
-
-global FREQ
-global FM_PM
-global DURATION_PM
-global SAMPLE_RATE
-
-MAX_VOLUME = 32767
-PI = np.pi
-SAMPLE_RATE = 44000  # 1/Sec
-BASIC_TIME = 5000 / SAMPLE_RATE  # ~0.1133 Sec
-FREQ = 18500  # Hz
-FREQ_SHIFT = 1000
-samples = np.array(0.).astype(np.float32)
-CHUNK_SIZE = 50
-RECORD_TIME = 4
-CHUNK_SIZE_FM = 250
-
-
-### PM constants ###
-FM_PM = 400  # frequency of modulating signal
-DURATION_PM = 2 / FM_PM  # 0.01#duration of the signal
-ALPHA = PI / 2  # 0.3 #amplitude of modulating signal
-THETA = PI / 4  # phase offset of modulating signal
-BETA = PI / 5  # constant carrier phase offset
-
+from constants import *
 
 
 ###------------------###
@@ -161,6 +119,7 @@ def cut_irellevant(data, chunk_size=50, thresh=0.2, draw=True):
     if draw:
         plt.figure()
         plt.plot(integral_array)
+        plt.show()
     ### Filter by thresh
     good_chunks = [i for i in range(len(integral_array)) if integral_array[i] > thresh]
 
@@ -203,44 +162,36 @@ def decide(data, number=3):
             final.append(1)
         else:
             final.append(0)
-    return final
+    return np.array(final)
 
 
 ###-----------###
 ### DECODE FM ###
 ###-----------###
 
-def DecypherFreqShift(data, ChunkSize=CHUNK_SIZE_FM, thresh=4):
-    #     sos = signal.butter(4,FREQ - FREQ_SHIFT, btype = 'hp', fs=SAMPLE_RATE, output='sos')
-    #     filtered = signal.sosfilt(sos, data)
-    #     data = np.array(filtered[:,0])
-    #     data = np.array(data[:, 0])
+def DecypherFreqShift(data, ChunkSize=CHUNK_SIZE):
     data = butter_highpass_filter(data, FREQ, SAMPLE_RATE, order=8)
 
     NumOfChunks = len(data) / ChunkSize
     ChunkList = np.array_split(data, NumOfChunks)
     ForTrans = [np.abs(np.fft.fft(dat)) for dat in ChunkList]
 
-    indexes = range(len(ForTrans))
-    ForTrans = [[0] * (ChunkSize // 2 - 1) +
-                list(ForTrans[index][ChunkSize // 2:3 * ChunkSize // 4]) +
-                [0] * (ChunkSize // 4 + 1) for index in indexes]
-    NewForTrans = ForTrans
-    #     for index in indexes:
-    #         if np.max(ForTrans[index]) > thresh:
-    #             NewForTrans.append(ForTrans[index])
-    freqs = {index: np.fft.fftfreq(ChunkSize, d=1 / SAMPLE_RATE) for index in range(len(NewForTrans))}
-    freqs_found = np.array([freqs[index]
-                            [np.argmax(NewForTrans[index])]
-                            for index in range(len(NewForTrans))])
-    #     print(freqs_found)
+    # ForTrans = [[0] * (ChunkSize // 2 - 1) +
+    #             list(ForTrans[index][ChunkSize // 2:3 * ChunkSize // 4]) +
+    #             [0] * (ChunkSize // 4 + 1) for index in indexes]
+
+    freqs = np.fft.fftfreq(ChunkSize, d=1 / SAMPLE_RATE)
+    freqs_found = np.array([freqs[np.argmax(ForTrans[index])] for index in range(len(ForTrans))])
+    # plt.plot(freqs, ForTrans[-5])
+    # plt.show()
     found = [1 if np.abs(FREQ + FREQ_SHIFT - np.abs(frequ))
                   < np.abs(FREQ - np.abs(frequ)) else 0 for frequ in freqs_found]
-    #     print(found)
-    return found
+    dat = decide(found, number=3 * RATIO)
+    return dat
 
 
-def RestoreChunks(DecyphData, Ratio):
+def RestoreChunks(DecyphData):
+    Ratio = RATIO
     ChunkData = []
     Chunk = 0
     first = DecyphData[0]
