@@ -4,7 +4,7 @@ from general_functions import *
 
 
 if __name__ == "__main__":
-    bits = np.array([1,0,1,0,1,0,1,1,0,0,0,1]*5)
-    to_send = multiply(bits, 3)
-    final_sample_list = modulation(to_send, mode="FM")
-    save_wave(SAMPLE_RATE, final_sample_list, 'samples/FM_BT_500.wav')
+    bits = BITS
+    final_sample_list = modulation(bits, mode="FM-nbit")
+    path = "samples/FM__BT{}_{}freqs_FS{}.wav".format(SAMPLES_PER_SYMBOL, NUM_OF_FREQS, FREQ_SHIFT)
+    save_wave(SAMPLE_RATE, final_sample_list, path)

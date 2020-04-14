@@ -11,7 +11,7 @@ c = 10 / SAMPLE_RATE
 ###------------------###
 
 def get_gausian(basic_time=BASIC_TIME):
-    samples_per_bit = int(basic_time * SAMPLE_RATE)
+    samples_per_bit = SAMPLES_PER_SYMBOL
 
     arr1 = np.linspace(0, 0.5, samples_per_bit // 2)
     arr2 = np.linspace(0.5, 1, samples_per_bit // 2)
@@ -37,6 +37,9 @@ def butter_highpass_filter(data, cutoff, fs, order=5):
     b, a = butter_highpass(cutoff, fs, order=order)
     y = lfilter(b, a, data)
     return y
+
+
+### decypher PM signals ###
 
 
 def DecypherPM(r, thresh):
@@ -144,8 +147,7 @@ def find_thresh(data, n_frames, n_bits):
 
         cur_n = len(cur_n)
         dif = np.abs(cur_n - n_frames)
-
-        if (dif < n_frames / (3 * n_bits) or i > 20) and cur_n != 0:
+        if (dif < CHUNK_SIZE/2 or i > 30) and cur_n != 0:
             return eps
 
         if cur_n < n_frames:
@@ -169,8 +171,11 @@ def decide(data, number=3):
 ### DECODE FM ###
 ###-----------###
 
-def DecypherFreqShift(data, ChunkSize=CHUNK_SIZE):
+def DecypherFreqShift(data, ChunkSize=CHUNK_SIZE, draw = False):
     data = butter_highpass_filter(data, FREQ, SAMPLE_RATE, order=8)
+    missing = len(data)%CHUNK_SIZE
+    missing = CHUNK_SIZE - missing
+    data = np.concatenate((data, np.zeros(missing)))
 
     NumOfChunks = len(data) / ChunkSize
     ChunkList = np.array_split(data, NumOfChunks)
@@ -182,11 +187,14 @@ def DecypherFreqShift(data, ChunkSize=CHUNK_SIZE):
 
     freqs = np.fft.fftfreq(ChunkSize, d=1 / SAMPLE_RATE)
     freqs_found = np.array([freqs[np.argmax(ForTrans[index])] for index in range(len(ForTrans))])
-    # plt.plot(freqs, ForTrans[-5])
-    # plt.show()
+
     found = [1 if np.abs(FREQ + FREQ_SHIFT - np.abs(frequ))
                   < np.abs(FREQ - np.abs(frequ)) else 0 for frequ in freqs_found]
-    dat = decide(found, number=3 * RATIO)
+    dat = decide(found, number=1 * RATIO)
+    if draw:
+        # plt.scatter(found[0])
+        plt.plot(freqs, ForTrans[0])
+        plt.show()
     return dat
 
 
@@ -212,3 +220,90 @@ def RestoreChunks(DecyphData):
         state = 1 - state
     return data
 
+### demodulate multy freq ###
+
+
+def majorty_decide(data_num_of_times):
+    num_of_freqs = NUM_OF_FREQS
+    ratio = RATIO
+    final_data = []
+    for pack_number in range(len(data_num_of_times)//ratio):
+        for bit_in_pack in range(num_of_freqs):
+            curr = 0
+            for pack_checked in range(pack_number*ratio, (pack_number+1)*ratio):
+                curr += data_num_of_times[pack_checked][bit_in_pack]
+            curr = curr/ratio
+            if curr > 1/2:
+                curr = 1
+            else:
+                curr = 0
+            final_data.append(curr)
+    return final_data
+
+
+def decide_multiple(lst_of_found, thresh = FREQ_SHIFT/2):
+    num_of_freqs = NUM_OF_FREQS
+    found_in_binary = []
+    for found in lst_of_found:
+        was_found = []
+        for i in range(num_of_freqs + 1):
+            flag = False
+            for freq in found:
+                if np.abs(freq - (FREQ + i*FREQ_SHIFT)) < thresh:
+                    was_found = was_found + [1]
+                    flag = True
+            if not flag:
+                was_found += [0]
+        found_in_binary.append(was_found)
+    return [found[:-1] for found in found_in_binary]
+
+
+def dechyperMultyFreq(data, draw = False, thresh = PEAK_THRESH, to_thresh=False):
+    missing = len(data) % CHUNK_SIZE
+    missing = CHUNK_SIZE - missing
+    ### check for defult size
+    data = np.concatenate((data, np.zeros(missing)))
+
+    # # final_sample_list = fmSymbolModulation(bits)
+    # data = np.array(final_sample_list)[:, 1]
+    NumOfChunks = len(data) / CHUNK_SIZE
+    ChunkList = np.array_split(data, NumOfChunks)
+    final_ChunkList = []
+    for i in range(len(ChunkList)):
+        # if i % RATIO == 0 or i % RATIO == RATIO -1:
+        #     continue
+        final_ChunkList.append(ChunkList[i])
+
+    ForTrans = [np.abs(np.fft.fft(dat)) for dat in final_ChunkList]
+    freqs = np.fft.fftfreq(CHUNK_SIZE, d=1 / SAMPLE_RATE)
+
+    ### make function that finds thresh
+    peaks = [signal.find_peaks(fort, distance=4, prominence=thresh) for fort in ForTrans]
+    peaks = [peak[0] for peak in peaks]
+    found = [np.array([freqs[peak] for peak in duo]) for duo in peaks]
+    found = [foun[foun > FREQ - 2 * FREQ_SHIFT] for foun in found]
+    if draw:
+        plt.plot(freqs, ForTrans[1])
+        plt.xlim(17000, 21000)
+        plt.show()
+
+    return majorty_decide(decide_multiple(found))
+
+
+def syncThresh(data, bits):
+    dat = dechyperMultyFreq(data, draw=False)
+    eps = PEAK_THRESH
+    lst = dat - bits
+    n_err = [np.count_nonzero(lst == 1), np.count_nonzero(lst == -1)]
+    total_err = n_err[0] + n_err[1]
+    while total_err != 0 and (n_err[0] == 0 or n_err[1] == 0):
+        if n_err[0] != 0:
+            eps = eps + eps / 2
+        else:
+            eps = eps - eps / 2
+        dat = dechyperMultyFreq(data, draw=False, thresh=eps)
+        lst = dat-bits
+        n_err = [np.count_nonzero(lst == 1), np.count_nonzero(lst == -1)]
+        total_err = n_err[0] + n_err[1]
+    print("total errors: {}".format(total_err))
+    return eps

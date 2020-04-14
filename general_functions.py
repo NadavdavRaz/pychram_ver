@@ -28,6 +28,7 @@ def record(file_name, record_time=RECORD_TIME):
 ### save/load wav file ###
 ###--------------------###
 
+
 def save_wave(frame_rate, audio_data, wave_filename):
     try:
         data = np.asarray(audio_data)
